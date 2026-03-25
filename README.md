@@ -11,8 +11,9 @@ Small helper to run **THC-Hydra** with SecLists **`*betterdefaultpasslist*`** co
 Put the script somewhere on your `PATH` (for example `/usr/local/bin`):
 
 ```bash
+git clone https://github.com/sidsherrill1/hydra-betterdefaults.git && cd hydra-betterdefaults
 chmod +x hydra-betterdefaults.sh
-sudo mv hydra-betterdefaults.sh /usr/local/bin/
+sudo mv hydra-betterdefaults.sh /usr/local/bin/hydra-betterdefaults
 ```
 
 Alternatively use `~/bin` or another directory that is already listed in `PATH`.
