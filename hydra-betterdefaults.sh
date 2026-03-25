@@ -5,8 +5,11 @@ set -euo pipefail
 
 SECLISTS_DEFAULT_CREDENTIALS="${SECLISTS_DEFAULT_CREDENTIALS:-/usr/share/seclists/Passwords/Default-Credentials}"
 HYDRA_BIN="${HYDRA_BIN:-hydra}"
+# Parallel tasks; lower values reduce "[ERROR] children crashed!" (Hydra child SIGSEGVs). 0 = omit -t (Hydra default).
+HYDRA_TASKS="${HYDRA_TASKS:-4}"
 TOMCAT_PORT="${TOMCAT_PORT:-8080}"
 DRY_RUN=0
+HYDRA_FAILS=0
 INCLUDE_BASE64=0
 EXTRA_HYDRA_OPTS=()
 OUTPUT_DIR=""
@@ -29,10 +32,11 @@ Options:
 Environment:
   SECLISTS_DEFAULT_CREDENTIALS  Default-Credentials folder (Kali: .../seclists/Passwords/Default-Credentials).
   HYDRA_BIN                     Path to hydra (default: hydra).
+  HYDRA_TASKS                   Parallel tasks (default: 4). Set 0 to use Hydra default. Add -e "-t N" to override.
   TOMCAT_PORT                   Port for Tomcat http-get-form scans (default: 8080).
 
 Example:
-  ./hydra-betterdefaults.sh -e "-t 4 -f" -o ./hydra-out targets.txt
+  ./hydra-betterdefaults.sh -e "-f" -o ./hydra-out targets.txt
 EOF
 }
 
@@ -114,6 +118,9 @@ run_hydra() {
   local combo="$1"
   shift
   local -a cmd=("$HYDRA_BIN" -C "$combo" -M "$TARGETS_FILE")
+  if [[ -n "$HYDRA_TASKS" && "$HYDRA_TASKS" != "0" ]]; then
+    cmd+=(-t "$HYDRA_TASKS")
+  fi
   cmd+=("${EXTRA_HYDRA_OPTS[@]}")
   if [[ -n "$OUTPUT_DIR" ]]; then
     local safe
@@ -124,7 +131,15 @@ run_hydra() {
   cmd+=("$@")
   log "+ ${cmd[*]}"
   if [[ "$DRY_RUN" -eq 0 ]]; then
+    local ec=0
+    set +e
     "${cmd[@]}"
+    ec=$?
+    set -e
+    if (( ec != 0 )); then
+      ((HYDRA_FAILS++)) || true
+      log "[WARN] hydra failed (exit $ec) for $(basename "$combo") — if you saw \"children crashed! (N)\", that is a Hydra worker SIGSEGV (N = worker slot). Try HYDRA_TASKS=2 or -e \"-t 2\". See README."
+    fi
   fi
 }
 
@@ -181,4 +196,7 @@ for f in "${combo_files[@]}"; do
 done
 
 log "---"
+if [[ "$DRY_RUN" -eq 0 && "$HYDRA_FAILS" -gt 0 ]]; then
+  log "Summary: $HYDRA_FAILS hydra run(s) exited non-zero."
+fi
 log "Done."
